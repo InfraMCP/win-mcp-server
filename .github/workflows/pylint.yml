@@ -28,7 +28,7 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install pylint
-        pip install -e .
+        pip install mcp pywinrm pydantic-settings
     - name: Analysing the code with pylint
       run: |
         pylint src/win_mcp_server/
