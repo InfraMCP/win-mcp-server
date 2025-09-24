@@ -10,17 +10,15 @@ from typing import Optional, Tuple
 
 
 def get_domain_from_hostname(hostname: str) -> str:
-    """Extract domain from FQDN or prompt user."""
+    """Extract domain from FQDN or use fallback."""
     parts = hostname.split(".")
     if len(parts) > 1:
         # Extract domain from FQDN (e.g., server.domain.local -> domain.local)
         domain = ".".join(parts[1:])
         return domain
 
-    # Fallback: prompt user
-    suggested_domain = f"{hostname}.local"
-    domain = input(f"Enter domain for {hostname} [{suggested_domain}]: ").strip()
-    return domain if domain else suggested_domain
+    # Fallback: use hostname.local
+    return f"{hostname}.local"
 
 
 def get_username_suggestion() -> str:
@@ -93,50 +91,171 @@ def keychain_check_expired(service: str, account: str) -> bool:
     return True  # Assume expired if we can't determine
 
 
-def get_credentials(hostname: str) -> Tuple[str, str]:
-    """Get credentials for hostname with secure prompting and caching."""
-    domain = get_domain_from_hostname(hostname)
-    service = f"winrm-mcp-{domain}"
-
-    # Get username
-    suggested_username = get_username_suggestion()
-    username = input(f"Username for {domain} [{suggested_username}]: ").strip()
-    if not username:
-        username = suggested_username
-
-    account = f"{domain}\\{username}"
-
-    # Check for cached password
-    if not keychain_check_expired(service, account):
-        password = keychain_get_password(service, account)
-        if password:
-            print(f"Using cached credentials for {account}")
-            return username, password
-
-    # Prompt for password securely
-    password = getpass.getpass(f"Password for {account}: ")
+def prompt_credentials_gui(domain: str, suggested_username: str) -> Tuple[str, str]:
+    """Prompt for credentials using macOS GUI dialogs."""
+    # Use username@domain format for cleaner display
+    suggested_account = f"{suggested_username}@{domain}"
+    username_script = f'''
+    display dialog "Enter username@domain for WinRM authentication:" ¬
+    with title "WinRM Authentication" ¬
+    with icon note ¬
+    default answer "{suggested_account}" ¬
+    buttons {{"Cancel", "OK"}} ¬
+    default button "OK"
+    '''
+    
+    try:
+        result = subprocess.run(['osascript', '-e', username_script], 
+                              capture_output=True, text=True, check=True)
+        account_input = result.stdout.strip().split('text returned:')[1].strip()
+        
+        # Parse both username@domain and domain\username formats
+        if '@' in account_input:
+            username, domain = account_input.split('@', 1)
+        elif '\\' in account_input:
+            domain, username = account_input.split('\\', 1)
+        else:
+            # If no domain specified, use original domain
+            username = account_input
+            
+    except (subprocess.CalledProcessError, IndexError):
+        raise RuntimeError("Username input cancelled")
+    
+    # Prompt for password (hidden) - always show domain\username format in password prompt
+    password_script = f'''
+    display dialog "Enter password for {domain}\\\\{username}:" ¬
+    with title "WinRM Authentication" ¬
+    with icon note ¬
+    default answer "" ¬
+    with hidden answer ¬
+    buttons {{"Cancel", "OK"}} ¬
+    default button "OK"
+    '''
+    
+    try:
+        result = subprocess.run(['osascript', '-e', password_script], 
+                              capture_output=True, text=True, check=True)
+        password = result.stdout.strip().split('text returned:')[1].strip()
+    except (subprocess.CalledProcessError, IndexError):
+        raise RuntimeError("Password input cancelled")
+    
     if not password:
-        print("Password cannot be empty", file=sys.stderr)
-        sys.exit(1)
+        raise RuntimeError("Password cannot be empty")
+    
+    return username, password
 
-    # Store in keychain with 4-hour TTL
+
+def get_credentials(hostname: str) -> Tuple[str, str]:
+    """Get credentials for hostname with GUI prompting and caching."""
+    domain = get_domain_from_hostname(hostname)
+    service = "winrm-mcp"
+    
+    # Check for cached credentials - look for both formats
+    try:
+        # Get all accounts for this service
+        account_result = subprocess.run([
+            'security', 'find-generic-password',
+            '-s', service
+        ], capture_output=True, text=True)
+        
+        if account_result.returncode == 0:
+            for line in account_result.stdout.split('\n'):
+                if 'acct' in line and domain in line:
+                    # Extract account name
+                    parts = line.split('"')
+                    if len(parts) >= 4:
+                        account = parts[3]
+                        # Clean up encoding
+                        account = account.replace('\\134', '\\')
+                        
+                        # Handle both formats: username@domain or domain\username
+                        username = None
+                        if '@' in account and domain in account:
+                            username = account.split('@')[0]
+                        elif '\\' in account and domain in account:
+                            username = account.split('\\')[1]
+                        
+                        if username:
+                            # Get password for this specific account
+                            password = keychain_get_password(service, account)
+                            if password:
+                                return username, password
+    except subprocess.CalledProcessError:
+        pass
+    
+    # No cached credentials found, prompt using GUI
+    username, password = prompt_credentials_gui(domain, get_username_suggestion())
+    
+    # Store in keychain using @ format
+    account = f"{username}@{domain}"
     try:
         keychain_set_password(service, account, password)
-        print(f"Credentials cached for 4 hours")
     except subprocess.CalledProcessError as e:
         print(f"Warning: Could not cache credentials: {e}", file=sys.stderr)
-
+    
     return username, password
+
+
+def clear_cached_credentials(hostname: str) -> bool:
+    """Clear cached credentials for hostname."""
+    domain = get_domain_from_hostname(hostname)
+    service = "winrm-mcp"
+    cleared = False
+    
+    try:
+        # Get account info (same logic as get_credentials)
+        result = subprocess.run([
+            'security', 'find-generic-password',
+            '-s', service
+        ], capture_output=True, text=True)
+        
+        if result.returncode == 0:
+            for line in result.stdout.split('\n'):
+                if 'acct' in line and domain in line:
+                    # Extract account name - it's at index 3
+                    parts = line.split('"')
+                    if len(parts) >= 4:
+                        account = parts[3]  # Account is at index 3
+                        # Handle both formats: username@domain or domain\username
+                        if ('@' in account and domain in account) or ('\\' in account and domain in account):
+                            try:
+                                subprocess.run([
+                                    'security', 'delete-generic-password',
+                                    '-s', service,
+                                    '-a', account
+                                ], capture_output=True, check=True)
+                                cleared = True
+                            except subprocess.CalledProcessError:
+                                pass
+    except subprocess.CalledProcessError:
+        pass
+    
+    return cleared
 
 
 def test_credentials_available(hostname: str) -> bool:
     """Test if valid credentials are available for hostname."""
     domain = get_domain_from_hostname(hostname)
-    service = f"winrm-mcp-{domain}"
-    suggested_username = get_username_suggestion()
-    account = f"{domain}\\{suggested_username}"
-
-    if keychain_check_expired(service, account):
-        return False
-
-    return keychain_get_password(service, account) is not None
+    service = "winrm-mcp"
+    
+    try:
+        result = subprocess.run([
+            'security', 'find-generic-password',
+            '-s', service,
+            '-g'
+        ], capture_output=True, text=True)
+        
+        if result.returncode == 0:
+            for line in result.stderr.split('\n'):
+                if 'acct' in line and domain in line:
+                    # Handle both @ and \ formats
+                    if f'@{domain}' in line or f'{domain}\\' in line:
+                        parts = line.split('"')
+                        if len(parts) >= 2:
+                            account_match = parts[1]
+                            if not keychain_check_expired(service, account_match):
+                                return True
+    except subprocess.CalledProcessError:
+        pass
+    
+    return False
