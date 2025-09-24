@@ -6,32 +6,7 @@ import sys
 import winrm
 from mcp.server.fastmcp import FastMCP
 
-
-def _import_credentials():
-    """Import credentials module with proper error handling."""
-    # Add scripts directory to path for shared credentials
-    scripts_path = os.path.join(
-        os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-        "scripts",
-    )
-    if scripts_path not in sys.path:
-        sys.path.insert(0, scripts_path)
-
-    try:
-        from domain_credentials import (
-            get_credentials_from_keychain,
-            get_domain_from_hostname,
-            test_credentials_available,
-        )
-
-        return (
-            get_credentials_from_keychain,
-            get_domain_from_hostname,
-            test_credentials_available,
-        )
-    except ImportError as e:
-        return None, None, None
-
+from .credentials import get_credentials, test_credentials_available
 
 # Create MCP server
 mcp = FastMCP("WinRM Server")
@@ -44,38 +19,16 @@ WINRM_TIMEOUT = 30
 def execute_powershell(hostname: str, command: str) -> dict:
     """Execute PowerShell command on remote Windows host"""
 
-    # Import credentials functions
-    (
-        get_credentials_from_keychain,
-        get_domain_from_hostname,
-        test_credentials_available,
-    ) = _import_credentials()
-
-    if not all(
-        [
-            get_credentials_from_keychain,
-            get_domain_from_hostname,
-            test_credentials_available,
-        ]
-    ):
-        return {
-            "error": "Credentials module not available",
-            "help": "Ensure domain_credentials module is available in ~/.aws/amazonq/scripts/",
-        }
-
-    # Check if credentials are available
+    # Check if credentials are available (non-interactive check)
     if not test_credentials_available(hostname):
-        domain = get_domain_from_hostname(hostname)
         return {
-            "error": f"No credentials found for {domain}",
-            "help": f"Run 'python3 ~/.aws/amazonq/scripts/domain_auth.py {domain}' to authenticate first",
+            "error": "No cached credentials available",
+            "help": "Run winrm-mcp-server in interactive mode first to authenticate",
         }
 
     try:
-        # Get credentials (triggers TouchID)
-        username, password = get_credentials_from_keychain(
-            get_domain_from_hostname(hostname)
-        )
+        # Get credentials (may prompt if not cached)
+        username, password = get_credentials(hostname)
 
         # Try HTTP first (most Windows servers use HTTP WinRM)
         session = winrm.Session(
@@ -100,7 +53,7 @@ def execute_powershell(hostname: str, command: str) -> dict:
     except Exception as e:
         # Clear password from memory on error
         password = None
-        return {"error": "WinRM connection or authentication failed"}
+        return {"error": f"WinRM connection or authentication failed: {str(e)}"}
 
 
 @mcp.tool()
@@ -122,6 +75,21 @@ def get_disk_space(hostname: str) -> dict:
     """Get disk space information from Windows host"""
     command = "Get-WmiObject -Class Win32_LogicalDisk | Select-Object DeviceID, @{Name='Size(GB)';Expression={[math]::Round($_.Size/1GB,2)}}, @{Name='FreeSpace(GB)';Expression={[math]::Round($_.FreeSpace/1GB,2)}} | ConvertTo-Json -Compress"
     return execute_powershell(hostname, command)
+
+
+@mcp.tool()
+def setup_credentials(hostname: str) -> dict:
+    """Setup credentials for a Windows host (interactive)"""
+    try:
+        username, password = get_credentials(hostname)
+        # Clear password from memory immediately
+        password = None
+        return {
+            "status": "success",
+            "message": f"Credentials configured for {username}",
+        }
+    except Exception as e:
+        return {"error": f"Failed to setup credentials: {str(e)}"}
 
 
 def main():

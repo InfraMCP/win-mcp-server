@@ -20,13 +20,9 @@ pip install winrm-mcp-server
 
 ### Prerequisites
 
-1. **Domain Authentication**: Set up domain credentials using the authentication script:
-   ```bash
-   python3 ~/.aws/amazonq/scripts/domain_auth.py domain.local
-   python3 ~/.aws/amazonq/scripts/domain_auth.py company.local
-   ```
+1. **WinRM Configuration**: Ensure target Windows hosts have WinRM enabled and configured.
 
-2. **WinRM Configuration**: Ensure target Windows hosts have WinRM enabled and configured.
+2. **Credential Setup**: The server will prompt for credentials on first use and cache them securely in macOS Keychain with 4-hour expiration.
 
 ### MCP Configuration
 
@@ -43,6 +39,16 @@ Add to your MCP settings file (e.g., `~/.config/mcp/settings.json`):
 ```
 
 ## Available Tools
+
+### `setup_credentials(hostname: str)`
+Setup credentials for a Windows host (interactive mode).
+
+**Parameters:**
+- `hostname`: The target Windows hostname (FQDN)
+
+**Returns:**
+- `status`: Success or error status
+- `message`: Confirmation message
 
 ### `execute_powershell(hostname: str, command: str)`
 Execute arbitrary PowerShell commands on a remote Windows host.
@@ -73,6 +79,11 @@ Get disk space information from a Windows host.
 
 ## Usage Examples
 
+### Initial Setup
+```bash
+"Setup credentials for server01.domain.local"
+```
+
 ### Basic System Check
 ```bash
 "Get system info and disk space for server01.domain.local"
@@ -96,6 +107,8 @@ Get disk space information from a Windows host.
 - **TouchID Authentication**: Credentials require TouchID authentication for access
 - **Memory Safety**: Passwords are immediately cleared from memory after use
 - **Transport Security**: Uses NTLM authentication over HTTP (configurable for HTTPS)
+- **Automatic Expiration**: Cached credentials expire after 4 hours
+- **Secure Prompting**: Password input is hidden and never logged
 
 ## Development
 
@@ -124,7 +137,6 @@ isort src/
 
 - Python 3.8+
 - macOS (for Keychain integration)
-- Domain credentials configured via authentication script
 - Target Windows hosts with WinRM enabled
 
 ## License
