@@ -148,7 +148,7 @@ def prompt_credentials_gui(domain: str, suggested_username: str) -> Tuple[str, s
 def get_credentials(hostname: str) -> Tuple[str, str]:
     """Get credentials for hostname with GUI prompting and caching."""
     domain = get_domain_from_hostname(hostname)
-    service = "winrm-mcp"
+    service = "win-mcp"
     
     # Check for cached credentials - look for both formats
     try:
@@ -199,7 +199,7 @@ def get_credentials(hostname: str) -> Tuple[str, str]:
 def clear_cached_credentials(hostname: str) -> bool:
     """Clear cached credentials for hostname."""
     domain = get_domain_from_hostname(hostname)
-    service = "winrm-mcp"
+    service = "win-mcp"
     cleared = False
     
     try:
@@ -236,7 +236,7 @@ def clear_cached_credentials(hostname: str) -> bool:
 def test_credentials_available(hostname: str) -> bool:
     """Test if valid credentials are available for hostname."""
     domain = get_domain_from_hostname(hostname)
-    service = "winrm-mcp"
+    service = "win-mcp"
     
     try:
         result = subprocess.run([
