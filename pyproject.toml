@@ -50,7 +50,7 @@ Issues = "https://github.com/rorymcmahon/win-mcp-server/issues"
 Documentation = "https://github.com/rorymcmahon/win-mcp-server#readme"
 
 [project.scripts]
-win-mcp-server = "winrm_mcp_server:main"
+win-mcp-server = "win_mcp_server:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

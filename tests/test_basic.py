@@ -3,10 +3,10 @@
 def test_package_imports():
     """Test that the main package can be imported."""
     try:
-        import winrm_mcp_server
+        import win_mcp_server
         assert True
     except ImportError:
-        assert False, "Failed to import winrm_mcp_server package"
+        assert False, "Failed to import win_mcp_server package"
 
 def test_basic_functionality():
     """Basic test that always passes."""

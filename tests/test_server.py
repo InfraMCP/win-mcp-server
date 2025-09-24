@@ -2,7 +2,7 @@
 
 import pytest
 
-from winrm_mcp_server import __version__
+from win_mcp_server import __version__
 
 
 def test_version():
@@ -12,6 +12,6 @@ def test_version():
 
 def test_import():
     """Test that main function can be imported."""
-    from winrm_mcp_server import main
+    from win_mcp_server import main
 
     assert callable(main)
