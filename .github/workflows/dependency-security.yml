@@ -1,0 +1,88 @@
+name: Dependency Security Check
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    # Run weekly on Mondays at 9 AM UTC
+    - cron: '0 9 * * 1'
+  workflow_dispatch:
+
+jobs:
+  dependency-check:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install safety pip-audit
+    
+    - name: Generate dependency report
+      run: |
+        python scripts/generate_dependency_report.py
+    
+    - name: Run safety check
+      run: |
+        safety check --json --output safety-report.json || true
+        
+    - name: Run pip-audit
+      run: |
+        pip-audit --format=json --output=audit-report.json || true
+    
+    - name: Upload dependency reports
+      uses: actions/upload-artifact@v4
+      with:
+        name: dependency-reports
+        path: |
+          docs/dependency-report.json
+          docs/DEPENDENCIES.md
+          safety-report.json
+          audit-report.json
+    
+    - name: Comment on PR with security findings
+      if: github.event_name == 'pull_request'
+      uses: actions/github-script@v6
+      with:
+        script: |
+          const fs = require('fs');
+          
+          let comment = '## 🔒 Dependency Security Report\n\n';
+          
+          // Check if safety report exists and has vulnerabilities
+          try {
+            const safetyData = JSON.parse(fs.readFileSync('safety-report.json', 'utf8'));
+            if (safetyData.length > 0) {
+              comment += '⚠️ **Security vulnerabilities found by Safety:**\n';
+              safetyData.forEach(vuln => {
+                comment += `- ${vuln.package_name} v${vuln.installed_version}: ${vuln.advisory}\n`;
+              });
+            } else {
+              comment += '✅ No known vulnerabilities found by Safety\n';
+            }
+          } catch (e) {
+            comment += '❓ Safety check results unavailable\n';
+          }
+          
+          comment += '\n📋 Full dependency report available in workflow artifacts.\n';
+          comment += '\n💡 **Security Recommendations:**\n';
+          comment += '- Review all dependency changes carefully\n';
+          comment += '- Update vulnerable packages immediately\n';
+          comment += '- Monitor security advisories for listed dependencies\n';
+          
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: comment
+          });

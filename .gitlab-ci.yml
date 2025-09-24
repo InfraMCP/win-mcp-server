@@ -1,0 +1,61 @@
+stages:
+  - test
+  - security
+  - build
+
+variables:
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+
+cache:
+  paths:
+    - .cache/pip/
+    - venv/
+
+before_script:
+  - python3 -m venv venv
+  - source venv/bin/activate
+  - pip install --upgrade pip
+
+test:
+  stage: test
+  script:
+    - pip install -r requirements.txt
+    - pip install -e ".[dev]"
+    - pytest
+    - black --check src/ tests/
+    - isort --check-only src/ tests/
+  artifacts:
+    paths:
+      - .coverage
+    expire_in: 1 week
+
+security_scan:
+  stage: security
+  script:
+    - pip install -r requirements.txt
+    - pip install safety pip-audit
+    - python3 scripts/generate_dependency_report.py
+    - safety check --json --output safety-report.json || true
+    - pip-audit --format=json --output=audit-report.json || true
+  artifacts:
+    paths:
+      - docs/dependency-report.json
+      - docs/DEPENDENCIES.md
+      - safety-report.json
+      - audit-report.json
+    expire_in: 1 week
+    reports:
+      junit: safety-report.json
+
+build:
+  stage: build
+  script:
+    - pip install build
+    - python -m build
+  artifacts:
+    paths:
+      - dist/
+    expire_in: 1 week
+  only:
+    - main
+    - tags
