@@ -1,4 +1,4 @@
-# WinRM MCP Server
+# Win MCP Server
 
 A Model Context Protocol (MCP) server that provides AI agents with the ability to interact with Windows servers using Windows Remote Management (WinRM). This server enables secure remote PowerShell execution and system management tasks on Windows hosts.
 
@@ -15,14 +15,14 @@ A Model Context Protocol (MCP) server that provides AI agents with the ability t
 ### From PyPI (Recommended)
 
 ```bash
-pip install winrm-mcp-server
+pip install win-mcp-server
 ```
 
 ### From Source
 
 ```bash
-git clone https://github.com/rorymcmahon/winrm-mcp-server.git
-cd winrm-mcp-server
+git clone https://github.com/rorymcmahon/win-mcp-server.git
+cd win-mcp-server
 pip install -e .
 ```
 

@@ -44,13 +44,13 @@ security = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/rorymcmahon/winrm-mcp-server"
-Repository = "https://github.com/rorymcmahon/winrm-mcp-server"
-Issues = "https://github.com/rorymcmahon/winrm-mcp-server/issues"
-Documentation = "https://github.com/rorymcmahon/winrm-mcp-server#readme"
+Homepage = "https://github.com/rorymcmahon/win-mcp-server"
+Repository = "https://github.com/rorymcmahon/win-mcp-server"
+Issues = "https://github.com/rorymcmahon/win-mcp-server/issues"
+Documentation = "https://github.com/rorymcmahon/win-mcp-server#readme"
 
 [project.scripts]
-winrm-mcp-server = "winrm_mcp_server:main"
+win-mcp-server = "winrm_mcp_server:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
