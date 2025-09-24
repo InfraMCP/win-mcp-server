@@ -12,8 +12,18 @@ A Model Context Protocol (MCP) server that provides AI agents with the ability t
 
 ## Installation
 
+### From PyPI (Recommended)
+
 ```bash
 pip install winrm-mcp-server
+```
+
+### From Source
+
+```bash
+git clone https://github.com/rorymcmahon/winrm-mcp-server.git
+cd winrm-mcp-server
+pip install -e .
 ```
 
 ## Configuration
