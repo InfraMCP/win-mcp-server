@@ -3,8 +3,14 @@ name: Safety Security Scan
 on:
   push:
     branches: [ main ]
+    paths-ignore:
+      - '*.md'
+      - 'docs/**'
   pull_request:
     branches: [ main ]
+    paths-ignore:
+      - '*.md'
+      - 'docs/**'
   schedule:
     # Run daily at 9 AM UTC
     - cron: '0 9 * * *'
