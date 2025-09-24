@@ -1,0 +1,64 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "winrm-mcp-server"
+version = "0.1.0"
+description = "MCP server for Windows Remote Management (WinRM) with secure domain authentication"
+authors = [{name = "Rory McMahon", email = "rory.mcmahon@vocus.com.au"}]
+license = {text = "MIT"}
+readme = "README.md"
+requires-python = ">=3.8"
+keywords = ["mcp", "winrm", "windows", "remote", "management", "powershell"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: System :: Systems Administration",
+    "Topic :: System :: Networking",
+]
+dependencies = [
+    "mcp==1.14.1",
+    "pywinrm==0.4.3",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest==8.3.3",
+    "pytest-asyncio==0.24.0",
+    "black==24.8.0",
+    "isort==5.13.2",
+]
+security = [
+    "safety>=3.0.0",
+    "pip-audit>=2.6.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/rorymcmahon/winrm-mcp-server"
+Repository = "https://github.com/rorymcmahon/winrm-mcp-server"
+Issues = "https://github.com/rorymcmahon/winrm-mcp-server/issues"
+Documentation = "https://github.com/rorymcmahon/winrm-mcp-server#readme"
+
+[project.scripts]
+winrm-mcp-server = "winrm_mcp_server:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.black]
+line-length = 88
+target-version = ['py38']
+
+[tool.isort]
+profile = "black"
+line_length = 88
