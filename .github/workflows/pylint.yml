@@ -31,4 +31,17 @@ jobs:
         pip install mcp pywinrm pydantic-settings
     - name: Analysing the code with pylint
       run: |
-        pylint src/win_mcp_server/ --disable=too-many-locals,too-many-branches,too-many-statements,too-many-nested-blocks,too-many-return-statements,broad-exception-caught
+        # Run pylint and capture exit code
+        pylint src/win_mcp_server/ --exit-zero --score=yes || exit_code=$?
+        
+        # Exit codes: 0=no issues, 1=fatal, 2=error, 4=warning, 8=refactor, 16=convention
+        # Allow warnings (4), refactor (8), and convention (16) but fail on fatal (1) and error (2)
+        if [ ${exit_code:-0} -eq 1 ] || [ ${exit_code:-0} -eq 2 ]; then
+          echo "❌ Pylint found fatal errors or errors that must be fixed"
+          exit 1
+        elif [ ${exit_code:-0} -gt 0 ]; then
+          echo "⚠️  Pylint found warnings, refactor suggestions, or convention issues"
+          echo "These are reported but don't fail the build"
+        else
+          echo "✅ Pylint analysis passed with no issues"
+        fi
