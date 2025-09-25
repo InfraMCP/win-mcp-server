@@ -170,5 +170,6 @@ MIT License - see [LICENSE](LICENSE) file for details.
 ## Support
 
 For issues and questions:
-- [GitHub Issues](https://github.com/rorymcmahon/winrm-mcp-server/issues)
-- [Documentation](https://github.com/rorymcmahon/winrm-mcp-server#readme)
+- [GitHub Issues](https://github.com/rorymcmahon/win-mcp-server/issues)
+- [Documentation](https://github.com/rorymcmahon/win-mcp-server#readme)
+- [Changelog](CHANGELOG.md)
