@@ -12,6 +12,10 @@ on:
       - '*.md'
       - 'docs/**'
 
+permissions:
+  contents: read
+  pull-requests: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -32,7 +36,10 @@ jobs:
     - name: Analysing the code with pylint
       run: |
         # Run pylint and capture exit code
-        pylint src/win_mcp_server/ --exit-zero --score=yes || exit_code=$?
+        pylint src/win_mcp_server/ --exit-zero --score=yes --output-format=json > pylint-report-${{ matrix.python-version }}.json || exit_code=$?
+        
+        # Also generate text output for console
+        pylint src/win_mcp_server/ --exit-zero --score=yes || true
         
         # Exit codes: 0=no issues, 1=fatal, 2=error, 4=warning, 8=refactor, 16=convention
         # Allow warnings (4), refactor (8), and convention (16) but fail on fatal (1) and error (2)
@@ -45,3 +52,74 @@ jobs:
         else
           echo "✅ Pylint analysis passed with no issues"
         fi
+    
+    - name: Upload pylint reports
+      uses: actions/upload-artifact@v4
+      with:
+        name: pylint-reports-${{ matrix.python-version }}
+        path: pylint-report-${{ matrix.python-version }}.json
+    
+    - name: Comment on PR with pylint findings
+      if: github.event_name == 'pull_request' && matrix.python-version == '3.11'
+      uses: actions/github-script@v6
+      with:
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        script: |
+          const fs = require('fs');
+          
+          let comment = '## 🔍 Pylint Code Quality Report\n\n';
+          
+          try {
+            const pylintData = JSON.parse(fs.readFileSync('pylint-report-3.11.json', 'utf8'));
+            
+            if (pylintData.length > 0) {
+              const errors = pylintData.filter(item => item.type === 'error');
+              const warnings = pylintData.filter(item => item.type === 'warning');
+              const conventions = pylintData.filter(item => item.type === 'convention');
+              const refactors = pylintData.filter(item => item.type === 'refactor');
+              
+              if (errors.length > 0) {
+                comment += `❌ **${errors.length} Error(s) found:**\n`;
+                errors.slice(0, 5).forEach(item => {
+                  comment += `- \`${item.path}:${item.line}\` - ${item.message} (${item.symbol})\n`;
+                });
+                if (errors.length > 5) comment += `- ... and ${errors.length - 5} more errors\n`;
+                comment += '\n';
+              }
+              
+              if (warnings.length > 0) {
+                comment += `⚠️ **${warnings.length} Warning(s) found:**\n`;
+                warnings.slice(0, 3).forEach(item => {
+                  comment += `- \`${item.path}:${item.line}\` - ${item.message} (${item.symbol})\n`;
+                });
+                if (warnings.length > 3) comment += `- ... and ${warnings.length - 3} more warnings\n`;
+                comment += '\n';
+              }
+              
+              if (conventions.length > 0) {
+                comment += `📝 **${conventions.length} Convention issue(s) found**\n`;
+              }
+              
+              if (refactors.length > 0) {
+                comment += `🔧 **${refactors.length} Refactor suggestion(s) found**\n`;
+              }
+            } else {
+              comment += '✅ **No issues found!** Code quality looks great.\n';
+            }
+            
+            comment += '\n📊 Full pylint report available in workflow artifacts.\n';
+            comment += '\n💡 **Code Quality Tips:**\n';
+            comment += '- Address errors first as they may cause runtime issues\n';
+            comment += '- Consider fixing warnings to improve code maintainability\n';
+            comment += '- Convention and refactor suggestions help maintain consistency\n';
+            
+          } catch (e) {
+            comment += '❓ Pylint report unavailable or could not be parsed\n';
+          }
+          
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: comment
+          });
