@@ -2,7 +2,6 @@
 """Secure credential management for WinRM connections."""
 
 import getpass
-import os
 import subprocess
 import sys
 import time
@@ -48,6 +47,7 @@ def keychain_set_password(
     subprocess.run(
         ["security", "delete-generic-password", "-s", service, "-a", account],
         capture_output=True,
+        check=False,
     )
 
     # Add new entry with comment containing expiration time
@@ -103,12 +103,12 @@ def prompt_credentials_gui(domain: str, suggested_username: str) -> Tuple[str, s
     buttons {{"Cancel", "OK"}} ¬
     default button "OK"
     '''
-    
+
     try:
-        result = subprocess.run(['osascript', '-e', username_script], 
+        result = subprocess.run(['osascript', '-e', username_script],
                               capture_output=True, text=True, check=True)
         account_input = result.stdout.strip().split('text returned:')[1].strip()
-        
+
         # Parse both username@domain and domain\username formats
         if '@' in account_input:
             username, domain = account_input.split('@', 1)
@@ -117,10 +117,10 @@ def prompt_credentials_gui(domain: str, suggested_username: str) -> Tuple[str, s
         else:
             # If no domain specified, use original domain
             username = account_input
-            
-    except (subprocess.CalledProcessError, IndexError):
-        raise RuntimeError("Username input cancelled")
-    
+
+    except (subprocess.CalledProcessError, IndexError) as exc:
+        raise RuntimeError("Username input cancelled") from exc
+
     # Prompt for password (hidden) - always show domain\username format in password prompt
     password_script = f'''
     display dialog "Enter password for {domain}\\\\{username}:" ¬
@@ -131,17 +131,17 @@ def prompt_credentials_gui(domain: str, suggested_username: str) -> Tuple[str, s
     buttons {{"Cancel", "OK"}} ¬
     default button "OK"
     '''
-    
+
     try:
-        result = subprocess.run(['osascript', '-e', password_script], 
+        result = subprocess.run(['osascript', '-e', password_script],
                               capture_output=True, text=True, check=True)
         password = result.stdout.strip().split('text returned:')[1].strip()
-    except (subprocess.CalledProcessError, IndexError):
-        raise RuntimeError("Password input cancelled")
-    
+    except (subprocess.CalledProcessError, IndexError) as exc:
+        raise RuntimeError("Password input cancelled") from exc
+
     if not password:
         raise RuntimeError("Password cannot be empty")
-    
+
     return username, password
 
 
@@ -149,15 +149,15 @@ def get_credentials(hostname: str) -> Tuple[str, str]:
     """Get credentials for hostname with GUI prompting and caching."""
     domain = get_domain_from_hostname(hostname)
     service = "win-mcp"
-    
+
     # Check for cached credentials - look for both formats
     try:
         # Get all accounts for this service
         account_result = subprocess.run([
             'security', 'find-generic-password',
             '-s', service
-        ], capture_output=True, text=True)
-        
+        ], capture_output=True, text=True, check=False)
+
         if account_result.returncode == 0:
             for line in account_result.stdout.split('\n'):
                 if 'acct' in line and domain in line:
@@ -167,14 +167,14 @@ def get_credentials(hostname: str) -> Tuple[str, str]:
                         account = parts[3]
                         # Clean up encoding
                         account = account.replace('\\134', '\\')
-                        
+
                         # Handle both formats: username@domain or domain\username
                         username = None
                         if '@' in account and domain in account:
                             username = account.split('@')[0]
                         elif '\\' in account and domain in account:
                             username = account.split('\\')[1]
-                        
+
                         if username:
                             # Get password for this specific account
                             password = keychain_get_password(service, account)
@@ -182,17 +182,17 @@ def get_credentials(hostname: str) -> Tuple[str, str]:
                                 return username, password
     except subprocess.CalledProcessError:
         pass
-    
+
     # No cached credentials found, prompt using GUI
     username, password = prompt_credentials_gui(domain, get_username_suggestion())
-    
+
     # Store in keychain using @ format
     account = f"{username}@{domain}"
     try:
         keychain_set_password(service, account, password)
     except subprocess.CalledProcessError as e:
         print(f"Warning: Could not cache credentials: {e}", file=sys.stderr)
-    
+
     return username, password
 
 
@@ -201,14 +201,14 @@ def clear_cached_credentials(hostname: str) -> bool:
     domain = get_domain_from_hostname(hostname)
     service = "win-mcp"
     cleared = False
-    
+
     try:
         # Get account info (same logic as get_credentials)
         result = subprocess.run([
             'security', 'find-generic-password',
             '-s', service
-        ], capture_output=True, text=True)
-        
+        ], capture_output=True, text=True, check=False)
+
         if result.returncode == 0:
             for line in result.stdout.split('\n'):
                 if 'acct' in line and domain in line:
@@ -217,7 +217,8 @@ def clear_cached_credentials(hostname: str) -> bool:
                     if len(parts) >= 4:
                         account = parts[3]  # Account is at index 3
                         # Handle both formats: username@domain or domain\username
-                        if ('@' in account and domain in account) or ('\\' in account and domain in account):
+                        if (('@' in account and domain in account) or
+                                ('\\' in account and domain in account)):
                             try:
                                 subprocess.run([
                                     'security', 'delete-generic-password',
@@ -229,7 +230,7 @@ def clear_cached_credentials(hostname: str) -> bool:
                                 pass
     except subprocess.CalledProcessError:
         pass
-    
+
     return cleared
 
 
@@ -237,14 +238,14 @@ def test_credentials_available(hostname: str) -> bool:
     """Test if valid credentials are available for hostname."""
     domain = get_domain_from_hostname(hostname)
     service = "win-mcp"
-    
+
     try:
         result = subprocess.run([
             'security', 'find-generic-password',
             '-s', service,
             '-g'
-        ], capture_output=True, text=True)
-        
+        ], capture_output=True, text=True, check=False)
+
         if result.returncode == 0:
             for line in result.stderr.split('\n'):
                 if 'acct' in line and domain in line:
@@ -257,5 +258,5 @@ def test_credentials_available(hostname: str) -> bool:
                                 return True
     except subprocess.CalledProcessError:
         pass
-    
+
     return False
