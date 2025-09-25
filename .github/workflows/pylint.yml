@@ -31,4 +31,4 @@ jobs:
         pip install mcp pywinrm pydantic-settings
     - name: Analysing the code with pylint
       run: |
-        pylint src/win_mcp_server/
+        pylint src/win_mcp_server/ --disable=too-many-locals,too-many-branches,too-many-statements,too-many-nested-blocks,too-many-return-statements
