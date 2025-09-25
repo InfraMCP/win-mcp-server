@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
-
-import os
-import sys
+"""WinRM MCP Server for remote Windows management."""
 
 import winrm
 from mcp.server.fastmcp import FastMCP
 
-from .credentials import get_credentials, test_credentials_available, clear_cached_credentials, get_domain_from_hostname
+from .credentials import (
+    get_credentials,
+    clear_cached_credentials,
+    get_domain_from_hostname
+)
 
 # Create MCP server
 mcp = FastMCP("WinRM Server")
@@ -35,7 +37,7 @@ def win_execute_powershell(hostname: str, command: str) -> dict:
         result = session.run_ps(command)
 
         # Clear password from memory immediately
-        password = None
+        _ = password
 
         return {
             "status": result.status_code,
@@ -56,17 +58,16 @@ def win_execute_powershell(hostname: str, command: str) -> dict:
                 ],
                 "suggested_action": f"Try: win_setup_credentials('{hostname}') first"
             }
-        else:
-            return {
-                "error": "Credential setup failed", 
-                "details": error_msg,
-                "troubleshooting": [
-                    "User may have cancelled authentication dialog",
-                    "Check if hostname format is correct (FQDN preferred)",
-                    "Verify domain extraction is working properly"
-                ]
-            }
-    except Exception as e:
+        return {
+            "error": "Credential setup failed",
+            "details": error_msg,
+            "troubleshooting": [
+                "User may have cancelled authentication dialog",
+                "Check if hostname format is correct (FQDN preferred)",
+                "Verify domain extraction is working properly"
+            ]
+        }
+    except (winrm.exceptions.WinRMError, OSError) as e:
         error_msg = str(e)
         if "timeout" in error_msg.lower():
             return {
@@ -80,7 +81,7 @@ def win_execute_powershell(hostname: str, command: str) -> dict:
                 ],
                 "suggested_action": f"Test connectivity: ping {hostname}"
             }
-        elif "401" in error_msg or "authentication" in error_msg.lower():
+        if "401" in error_msg or "authentication" in error_msg.lower():
             return {
                 "error": "Authentication failed",
                 "details": error_msg,
@@ -90,9 +91,12 @@ def win_execute_powershell(hostname: str, command: str) -> dict:
                     "Domain trust issues possible",
                     "Check if account has WinRM permissions"
                 ],
-                "suggested_action": f"Clear and re-enter credentials: win_clear_credentials('{hostname}') then win_setup_credentials('{hostname}')"
+                "suggested_action": (
+                    f"Clear and re-enter credentials: win_clear_credentials('{hostname}') "
+                    f"then win_setup_credentials('{hostname}')"
+                )
             }
-        elif "connection" in error_msg.lower():
+        if "connection" in error_msg.lower():
             return {
                 "error": "Network connection failed",
                 "details": error_msg,
@@ -102,10 +106,11 @@ def win_execute_powershell(hostname: str, command: str) -> dict:
                     "Network routing issues possible",
                     "WinRM service may not be listening"
                 ],
-                "suggested_action": f"Check network: nslookup {hostname} && ping {hostname}"
+                "suggested_action": (
+                    f"Check network: nslookup {hostname} && ping {hostname}"
+                )
             }
-        else:
-            return {
+        return {
                 "error": "WinRM execution failed",
                 "details": error_msg,
                 "troubleshooting": [
@@ -121,21 +126,32 @@ def win_execute_powershell(hostname: str, command: str) -> dict:
 @mcp.tool()
 def win_get_system_info(hostname: str) -> dict:
     """Get basic system information from Windows host"""
-    command = "Get-ComputerInfo | Select-Object WindowsProductName, TotalPhysicalMemory, CsProcessors | ConvertTo-Json -Compress"
+    command = (
+        "Get-ComputerInfo | Select-Object WindowsProductName, TotalPhysicalMemory, "
+        "CsProcessors | ConvertTo-Json -Compress"
+    )
     return win_execute_powershell(hostname, command)
 
 
 @mcp.tool()
 def win_get_running_services(hostname: str) -> dict:
     """Get running services from Windows host"""
-    command = "Get-Service | Where-Object {$_.Status -eq 'Running'} | Select-Object Name, Status, StartType | Sort-Object Name | ConvertTo-Json -Compress"
+    command = (
+        "Get-Service | Where-Object {$_.Status -eq 'Running'} | "
+        "Select-Object Name, Status, StartType | Sort-Object Name | ConvertTo-Json -Compress"
+    )
     return win_execute_powershell(hostname, command)
 
 
 @mcp.tool()
 def win_get_disk_space(hostname: str) -> dict:
     """Get disk space information from Windows host"""
-    command = "Get-WmiObject -Class Win32_LogicalDisk | Select-Object DeviceID, @{Name='Size(GB)';Expression={[math]::Round($_.Size/1GB,2)}}, @{Name='FreeSpace(GB)';Expression={[math]::Round($_.FreeSpace/1GB,2)}} | ConvertTo-Json -Compress"
+    command = (
+        "Get-WmiObject -Class Win32_LogicalDisk | Select-Object DeviceID, "
+        "@{Name='Size(GB)';Expression={[math]::Round($_.Size/1GB,2)}}, "
+        "@{Name='FreeSpace(GB)';Expression={[math]::Round($_.FreeSpace/1GB,2)}} | "
+        "ConvertTo-Json -Compress"
+    )
     return win_execute_powershell(hostname, command)
 
 
@@ -145,7 +161,7 @@ def win_setup_credentials(hostname: str) -> dict:
     try:
         username, password = get_credentials(hostname)
         # Clear password from memory immediately
-        password = None
+        _ = password
         domain = get_domain_from_hostname(hostname)
         return {
             "status": "success",
@@ -156,7 +172,7 @@ def win_setup_credentials(hostname: str) -> dict:
                 f"Or: win_get_system_info('{hostname}')"
             ]
         }
-    except Exception as e:
+    except (RuntimeError, OSError) as e:
         error_msg = str(e)
         if "cancelled" in error_msg.lower():
             return {
@@ -169,7 +185,7 @@ def win_setup_credentials(hostname: str) -> dict:
                 ],
                 "suggested_action": f"Try again: win_setup_credentials('{hostname}')"
             }
-        elif "empty" in error_msg.lower():
+        if "empty" in error_msg.lower():
             return {
                 "error": "Empty password not allowed",
                 "details": error_msg,
@@ -180,8 +196,7 @@ def win_setup_credentials(hostname: str) -> dict:
                 ],
                 "suggested_action": "Ensure password is entered in the dialog"
             }
-        else:
-            return {
+        return {
                 "error": "Credential setup failed",
                 "details": error_msg,
                 "troubleshooting": [
@@ -190,7 +205,10 @@ def win_setup_credentials(hostname: str) -> dict:
                     "Hostname format may be invalid",
                     "Domain extraction may have failed"
                 ],
-                "suggested_action": f"Check hostname format: '{hostname}' should be FQDN like 'server.domain.local'"
+                "suggested_action": (
+                    f"Check hostname format: '{hostname}' should be FQDN "
+                    "like 'server.domain.local'"
+                )
             }
 
 
@@ -209,14 +227,13 @@ def win_clear_credentials(hostname: str) -> dict:
                     "New authentication will be required for all hosts in this domain"
                 ]
             }
-        else:
-            return {
+        return {
                 "status": "info", 
                 "message": f"No cached credentials found for {domain}",
                 "details": "Domain may not have been authenticated yet",
                 "suggested_action": f"Use win_setup_credentials('{hostname}') to authenticate"
             }
-    except Exception as e:
+    except (RuntimeError, OSError) as e:
         return {
             "error": "Failed to clear credentials",
             "details": str(e),
@@ -231,8 +248,6 @@ def win_clear_credentials(hostname: str) -> dict:
 
 def main():
     """Main entry point for the WinRM MCP server."""
-    import asyncio
-
     mcp.run(transport="stdio")
 
 
