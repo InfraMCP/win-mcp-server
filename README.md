@@ -1,5 +1,11 @@
 # Win MCP Server
 
+[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Pylint](https://github.com/rorymcmahon/win-mcp-server/actions/workflows/pylint.yml/badge.svg)](https://github.com/rorymcmahon/win-mcp-server/actions/workflows/pylint.yml)
+[![Safety Security Scan](https://github.com/rorymcmahon/win-mcp-server/actions/workflows/safety-scan.yml/badge.svg)](https://github.com/rorymcmahon/win-mcp-server/actions/workflows/safety-scan.yml)
+[![Dependency Security Check](https://github.com/rorymcmahon/win-mcp-server/actions/workflows/dependency-security.yml/badge.svg)](https://github.com/rorymcmahon/win-mcp-server/actions/workflows/dependency-security.yml)
+
 A Model Context Protocol (MCP) server that provides AI agents with the ability to interact with Windows servers using Windows Remote Management (WinRM). This server enables secure remote PowerShell execution and system management tasks on Windows hosts.
 
 ## Features
@@ -145,7 +151,7 @@ isort src/
 
 ## Requirements
 
-- Python 3.8+
+- Python 3.10+
 - macOS (for Keychain integration)
 - Target Windows hosts with WinRM enabled
 
