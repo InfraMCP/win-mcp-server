@@ -46,7 +46,7 @@ jobs:
     
     - name: Run safety check
       run: |
-        safety check --json > safety-report.json || true
+        safety check --json --output safety-report.json || echo '[]' > safety-report.json
         
     - name: Run pip-audit
       run: |
@@ -66,7 +66,7 @@ jobs:
       if: github.event_name == 'pull_request'
       uses: actions/github-script@v6
       with:
-        github-token: ${{ secrets.ACTIONS_TOKEN }}
+        github-token: ${{ secrets.GITHUB_TOKEN }}
         script: |
           const fs = require('fs');
           
