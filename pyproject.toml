@@ -44,10 +44,10 @@ security = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/rorymcmahon/win-mcp-server"
-Repository = "https://github.com/rorymcmahon/win-mcp-server"
-Issues = "https://github.com/rorymcmahon/win-mcp-server/issues"
-Documentation = "https://github.com/rorymcmahon/win-mcp-server#readme"
+Homepage = "https://github.com/InfraMCP/win-mcp-server"
+Repository = "https://github.com/InfraMCP/win-mcp-server"
+Issues = "https://github.com/InfraMCP/win-mcp-server/issues"
+Documentation = "https://github.com/InfraMCP/win-mcp-server#readme"
 
 [project.scripts]
 win-mcp-server = "win_mcp_server:main"
