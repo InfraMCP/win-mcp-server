@@ -27,6 +27,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Corrected `requires-python` to `>=3.10` (and dropped the 3.8/3.9 classifiers):
   the `mcp` dependency requires 3.10+, so the previous `>=3.8` claim was
   unsatisfiable and would install then fail at import on 3.8/3.9.
+- Raised the `setuptools` build requirement to `>=83.0.0` to address
+  PYSEC-2026-3447 (caught by the new `pip-audit` scan; missed by Dependabot and
+  Safety because it is a build/transitive dependency).
 
 ### Changed
 - Bumped `mcp` from 1.14.1 to 1.30.0, `pytest` to 9.0.3, `pytest-asyncio` to
