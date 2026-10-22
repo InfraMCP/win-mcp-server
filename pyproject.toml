@@ -27,7 +27,7 @@ classifiers = [
     "Topic :: System :: Networking",
 ]
 dependencies = [
-    "mcp==1.14.1",
+    "mcp==1.27.2",
     "pywinrm==0.4.3",
 ]
 
