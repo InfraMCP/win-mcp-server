@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- Read WinRM credentials from `WINRM_USER`/`WINRM_PWD` (or `WINRM-USER`/`WINRM-PWD`)
+  environment variables, bypassing the GUI prompt and Keychain cache for
+  non-interactive/CI usage.
+
 ## [0.2.3] - 2025-09-25
 
 ### Changed

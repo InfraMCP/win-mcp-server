@@ -40,6 +40,18 @@ pip install -e .
 
 2. **Credential Setup**: The server will prompt for credentials on first use and cache them securely in macOS Keychain with 4-hour expiration.
 
+   For non-interactive/CI environments you can skip the prompt entirely by
+   setting environment variables. When both are present they take precedence
+   over any cached Keychain entry:
+
+   ```bash
+   export WINRM_USER="myuser"
+   export WINRM_PWD="mypassword"
+   ```
+
+   The hyphenated names `WINRM-USER` / `WINRM-PWD` are also accepted if your
+   launcher can set them.
+
 ### MCP Configuration
 
 Add to your MCP settings file (e.g., `~/.config/mcp/settings.json`):

@@ -2,6 +2,7 @@
 """Secure credential management for WinRM connections."""
 
 import getpass
+import ipaddress
 import subprocess
 import sys
 import time
@@ -9,20 +10,78 @@ from typing import Optional, Tuple
 
 
 def get_domain_from_hostname(hostname: str) -> str:
-    """Extract domain from FQDN or use fallback."""
+    """Derive a stable credential-store key ("domain") from a host.
+
+    - IP addresses (v4/v6) have no domain component and are used verbatim, so
+      ``10.211.55.7`` keys on the full address rather than being mangled into
+      ``211.55.7`` by naive FQDN splitting.
+    - FQDNs use the parent domain (e.g. ``server.domain.local`` -> ``domain.local``).
+    - Bare hostnames fall back to ``<hostname>.local``.
+    """
+    # IP addresses have no domain to split on - key on the address itself.
+    try:
+        ipaddress.ip_address(hostname)
+        return hostname
+    except ValueError:
+        pass
+
     parts = hostname.split(".")
     if len(parts) > 1:
         # Extract domain from FQDN (e.g., server.domain.local -> domain.local)
-        domain = ".".join(parts[1:])
-        return domain
+        return ".".join(parts[1:])
 
     # Fallback: use hostname.local
     return f"{hostname}.local"
 
 
+def _username_for_account(account: str, domain: str) -> Optional[str]:
+    """Return the username if ``account`` belongs to ``domain``, else ``None``.
+
+    Handles both ``username@domain`` and ``domain\\username`` formats.
+    """
+    if "@" in account and account.endswith(f"@{domain}"):
+        return account.split("@", 1)[0]
+    if "\\" in account and account.startswith(f"{domain}\\"):
+        return account.split("\\", 1)[1]
+    return None
+
+
 def get_username_suggestion() -> str:
     """Get suggested username (current user)."""
     return getpass.getuser()
+
+
+def keychain_list_accounts(service: str) -> list:
+    """List all Keychain account names for a service.
+
+    ``security find-generic-password -s <service>`` only ever returns a single
+    (default) item, so it cannot be used to enumerate multiple stored accounts.
+    ``dump-keychain`` lists every item, letting us find credentials for any
+    host/domain regardless of how many entries exist.
+    """
+    accounts = []
+    try:
+        result = subprocess.run(
+            ["security", "dump-keychain"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError:
+        return accounts
+
+    pending_account = None
+    for line in result.stdout.split("\n"):
+        stripped = line.strip()
+        if stripped.startswith('"acct"<blob>='):
+            # Extract the quoted account value
+            parts = line.split('"')
+            pending_account = parts[3] if len(parts) >= 4 else None
+        elif stripped.startswith('"svce"<blob>=') and pending_account is not None:
+            if f'"{service}"' in stripped:
+                accounts.append(pending_account.replace("\\134", "\\"))
+            pending_account = None
+    return accounts
 
 
 def keychain_get_password(service: str, account: str) -> Optional[str]:
@@ -73,18 +132,23 @@ def keychain_set_password(
 def keychain_check_expired(service: str, account: str) -> bool:
     """Check if keychain entry is expired."""
     try:
+        # NB: ``-j`` is the *comment* flag for ``add-generic-password`` and is
+        # NOT valid for ``find-generic-password`` (it makes the command exit
+        # non-zero). The stored expiry lives in the ``icmt`` attribute, which
+        # the plain attribute dump prints as: "icmt"<blob>="expires:<epoch>".
         result = subprocess.run(
-            ["security", "find-generic-password", "-s", service, "-a", account, "-j"],
+            ["security", "find-generic-password", "-s", service, "-a", account],
             capture_output=True,
             text=True,
             check=True,
         )
 
-        # Parse comment for expiry time
-        comment = result.stdout.strip()
-        if comment.startswith("expires:"):
-            expiry_time = int(comment.split(":")[1])
-            return time.time() > expiry_time
+        # Parse the icmt attribute for the expiry time
+        for line in result.stdout.splitlines():
+            stripped = line.strip()
+            if stripped.startswith('"icmt"<blob>=') and "expires:" in stripped:
+                expiry_time = int(stripped.split("expires:")[1].strip().strip('"'))
+                return time.time() > expiry_time
     except (subprocess.CalledProcessError, ValueError, IndexError):
         pass
 
@@ -150,38 +214,23 @@ def get_credentials(hostname: str) -> Tuple[str, str]:
     domain = get_domain_from_hostname(hostname)
     service = "win-mcp"
 
-    # Check for cached credentials - look for both formats
-    try:
-        # Get all accounts for this service
-        account_result = subprocess.run([
-            'security', 'find-generic-password',
-            '-s', service
-        ], capture_output=True, text=True, check=False)
+    # Check for cached credentials across all stored accounts for this
+    # service. We enumerate every account (find-generic-password only returns
+    # one) and match those belonging to this domain, in both the
+    # username@domain and domain\username formats.
+    for account in keychain_list_accounts(service):
+        # Determine the username for this account if it matches the domain
+        username = _username_for_account(account, domain)
+        if not username:
+            continue
 
-        if account_result.returncode == 0:
-            for line in account_result.stdout.split('\n'):
-                if 'acct' in line and domain in line:
-                    # Extract account name
-                    parts = line.split('"')
-                    if len(parts) >= 4:
-                        account = parts[3]
-                        # Clean up encoding
-                        account = account.replace('\\134', '\\')
+        # Honour the TTL: skip expired entries so they get re-prompted
+        if keychain_check_expired(service, account):
+            continue
 
-                        # Handle both formats: username@domain or domain\username
-                        username = None
-                        if '@' in account and domain in account:
-                            username = account.split('@')[0]
-                        elif '\\' in account and domain in account:
-                            username = account.split('\\')[1]
-
-                        if username:
-                            # Get password for this specific account
-                            password = keychain_get_password(service, account)
-                            if password:
-                                return username, password
-    except subprocess.CalledProcessError:
-        pass
+        password = keychain_get_password(service, account)
+        if password:
+            return username, password
 
     # No cached credentials found, prompt using GUI
     username, password = prompt_credentials_gui(domain, get_username_suggestion())
@@ -197,66 +246,46 @@ def get_credentials(hostname: str) -> Tuple[str, str]:
 
 
 def clear_cached_credentials(hostname: str) -> bool:
-    """Clear cached credentials for hostname."""
+    """Clear all cached credentials for hostname's domain.
+
+    Enumerates every stored account via ``keychain_list_accounts`` (not
+    ``find-generic-password``, which only ever returns a single item) so that
+    all matching entries are removed when multiple exist.
+    """
     domain = get_domain_from_hostname(hostname)
     service = "win-mcp"
     cleared = False
 
-    try:
-        # Get account info (same logic as get_credentials)
-        result = subprocess.run([
-            'security', 'find-generic-password',
-            '-s', service
-        ], capture_output=True, text=True, check=False)
-
-        if result.returncode == 0:
-            for line in result.stdout.split('\n'):
-                if 'acct' in line and domain in line:
-                    # Extract account name - it's at index 3
-                    parts = line.split('"')
-                    if len(parts) >= 4:
-                        account = parts[3]  # Account is at index 3
-                        # Handle both formats: username@domain or domain\username
-                        if (('@' in account and domain in account) or
-                                ('\\' in account and domain in account)):
-                            try:
-                                subprocess.run([
-                                    'security', 'delete-generic-password',
-                                    '-s', service,
-                                    '-a', account
-                                ], capture_output=True, check=True)
-                                cleared = True
-                            except subprocess.CalledProcessError:
-                                pass
-    except subprocess.CalledProcessError:
-        pass
+    for account in keychain_list_accounts(service):
+        if _username_for_account(account, domain) is None:
+            continue
+        try:
+            subprocess.run(
+                ["security", "delete-generic-password",
+                 "-s", service, "-a", account],
+                capture_output=True,
+                check=True,
+            )
+            cleared = True
+        except subprocess.CalledProcessError:
+            pass
 
     return cleared
 
 
-def test_credentials_available(hostname: str) -> bool:
-    """Test if valid credentials are available for hostname."""
+def credentials_available(hostname: str) -> bool:
+    """Return True if a non-expired cached credential exists for hostname.
+
+    Uses the same enumeration + domain-matching logic as ``get_credentials``
+    so behaviour stays consistent across multiple stored accounts.
+    """
     domain = get_domain_from_hostname(hostname)
     service = "win-mcp"
 
-    try:
-        result = subprocess.run([
-            'security', 'find-generic-password',
-            '-s', service,
-            '-g'
-        ], capture_output=True, text=True, check=False)
-
-        if result.returncode == 0:
-            for line in result.stderr.split('\n'):
-                if 'acct' in line and domain in line:
-                    # Handle both @ and \ formats
-                    if f'@{domain}' in line or f'{domain}\\' in line:
-                        parts = line.split('"')
-                        if len(parts) >= 2:
-                            account_match = parts[1]
-                            if not keychain_check_expired(service, account_match):
-                                return True
-    except subprocess.CalledProcessError:
-        pass
+    for account in keychain_list_accounts(service):
+        if _username_for_account(account, domain) is None:
+            continue
+        if not keychain_check_expired(service, account):
+            return True
 
     return False
