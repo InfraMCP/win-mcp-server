@@ -14,6 +14,7 @@ on:
   schedule:
     # Run daily at 9 AM UTC
     - cron: '0 9 * * *'
+  workflow_dispatch: {}
 
 jobs:
   security:
@@ -35,3 +36,29 @@ jobs:
         uses: pyupio/safety-action@v1
         with:
           api-key: ${{ secrets.SAFETY_API_KEY }}
+
+  pip-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install package with dev dependencies
+        run: |
+          # Upgrade build tooling too: the runner ships an older setuptools
+          # that pip-audit flags (e.g. PYSEC-2026-3447), and it is part of the
+          # resolved environment we audit.
+          python -m pip install --upgrade pip "setuptools>=83.0.0"
+          pip install -e ".[dev]"
+
+      - name: Audit the full resolved dependency tree
+        run: |
+          pip install pip-audit
+          # Audit every installed package (runtime + dev + transitive),
+          # not just the two pins in requirements.txt that Safety sees.
+          pip-audit
+
