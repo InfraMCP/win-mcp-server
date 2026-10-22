@@ -182,3 +182,42 @@ def test_credentials_available_false_when_only_expired():
                       return_value=["enzo@10.211.55.7"]), \
          patch.object(credentials, "keychain_check_expired", return_value=True):
         assert credentials.credentials_available("10.211.55.7") is False
+
+
+# --- credentials_from_env / env precedence -----------------------------------
+
+def test_credentials_from_env_reads_underscore_names():
+    with patch.dict("os.environ", {"WINRM_USER": "envuser", "WINRM_PWD": "envpass"},
+                    clear=True):
+        assert credentials.credentials_from_env() == ("envuser", "envpass")
+
+
+def test_credentials_from_env_reads_hyphenated_aliases():
+    with patch.dict("os.environ", {"WINRM-USER": "envuser", "WINRM-PWD": "envpass"},
+                    clear=True):
+        assert credentials.credentials_from_env() == ("envuser", "envpass")
+
+
+def test_credentials_from_env_requires_both():
+    with patch.dict("os.environ", {"WINRM_USER": "envuser"}, clear=True):
+        assert credentials.credentials_from_env() is None
+    with patch.dict("os.environ", {"WINRM_PWD": "envpass"}, clear=True):
+        assert credentials.credentials_from_env() is None
+
+
+def test_credentials_from_env_absent_returns_none():
+    with patch.dict("os.environ", {}, clear=True):
+        assert credentials.credentials_from_env() is None
+
+
+def test_get_credentials_env_takes_precedence_over_keychain():
+    """Env vars bypass the Keychain/GUI path entirely when both are set."""
+    with patch.dict("os.environ", {"WINRM_USER": "envuser", "WINRM_PWD": "envpass"},
+                    clear=True), \
+         patch.object(credentials, "keychain_list_accounts") as list_accounts, \
+         patch.object(credentials, "prompt_credentials_gui") as prompt:
+        username, password = credentials.get_credentials("10.211.55.7")
+
+    assert (username, password) == ("envuser", "envpass")
+    list_accounts.assert_not_called()
+    prompt.assert_not_called()

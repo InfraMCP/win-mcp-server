@@ -3,6 +3,7 @@
 
 import getpass
 import ipaddress
+import os
 import subprocess
 import sys
 import time
@@ -209,8 +210,33 @@ def prompt_credentials_gui(domain: str, suggested_username: str) -> Tuple[str, s
     return username, password
 
 
+def credentials_from_env() -> Optional[Tuple[str, str]]:
+    """Return (username, password) from environment variables, or None.
+
+    Supports ``WINRM_USER``/``WINRM_PWD`` and the hyphenated aliases
+    ``WINRM-USER``/``WINRM-PWD`` (for launchers that set hyphenated names).
+    Both a user and a password must be present for the pair to take effect;
+    a partial pair is ignored so we fall through to the Keychain/GUI path.
+    """
+    user = os.environ.get("WINRM_USER") or os.environ.get("WINRM-USER")
+    pwd = os.environ.get("WINRM_PWD") or os.environ.get("WINRM-PWD")
+    if user and pwd:
+        return user, pwd
+    return None
+
+
 def get_credentials(hostname: str) -> Tuple[str, str]:
-    """Get credentials for hostname with GUI prompting and caching."""
+    """Get credentials for hostname with GUI prompting and caching.
+
+    Resolution order: environment variables (``WINRM_USER``/``WINRM_PWD``)
+    take precedence, then non-expired cached Keychain entries, then a GUI
+    prompt (whose result is cached).
+    """
+    # Non-interactive / CI: explicit env vars win over the cache and prompt.
+    env_creds = credentials_from_env()
+    if env_creds is not None:
+        return env_creds
+
     domain = get_domain_from_hostname(hostname)
     service = "win-mcp"
 
