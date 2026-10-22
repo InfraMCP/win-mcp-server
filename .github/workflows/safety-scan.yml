@@ -35,3 +35,26 @@ jobs:
         uses: pyupio/safety-action@v1
         with:
           api-key: ${{ secrets.SAFETY_API_KEY }}
+
+  pip-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install package with dev dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Audit the full resolved dependency tree
+        run: |
+          pip install pip-audit
+          # Audit every installed package (runtime + dev + transitive),
+          # not just the two pins in requirements.txt that Safety sees.
+          pip-audit
+
