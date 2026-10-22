@@ -11,6 +11,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Read WinRM credentials from `WINRM_USER`/`WINRM_PWD` (or `WINRM-USER`/`WINRM-PWD`)
   environment variables, bypassing the GUI prompt and Keychain cache for
   non-interactive/CI usage.
+- Test suite for credential resolution (`tests/test_credentials.py`) and a
+  `Tests` CI workflow that runs it on Python 3.10-3.12.
+
+### Fixed
+- Cached credential lookup now enumerates **all** `win-mcp` Keychain entries via
+  `security dump-keychain` instead of `find-generic-password` (which returns only
+  one), so the correct credentials are found when multiple hosts are stored.
+- IP-address hosts are keyed on the full address (e.g. `10.211.55.7`) instead of
+  being mangled by FQDN splitting, and the 4-hour TTL is now enforced on read.
+
+### Changed
+- Bumped `mcp` from 1.14.1 to 1.27.2.
 
 ## [0.2.3] - 2025-09-25
 
