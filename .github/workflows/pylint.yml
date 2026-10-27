@@ -18,6 +18,7 @@ permissions:
 
 jobs:
   build:
+    name: pylint (${{ matrix.python-version }})
     runs-on: ubuntu-latest
     strategy:
       matrix:
